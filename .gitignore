@@ -1,0 +1,19 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary and build files
+*.tmp
+temp.*
+temp_*
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
