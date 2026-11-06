@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Mekanizma Tekniği - Kinematik Zincir ve Hareket Simülasyonu</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-3 font-sans">
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl p-5 shadow-lg max-w-6xl mx-auto space-y-4">
+    
+    <!-- Üst Başlık ve Kontroller -->
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+      <div>
+        <h2 class="text-xl font-bold tracking-tight text-[var(--foreground)] flex items-center gap-2">
+          <span class="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
+          MAK 3103: Kinematik Zincir ve Mekanizma Simülasyonu
+        </h2>
+        <p class="text-xs text-[var(--muted-foreground)] mt-0.5">
+          6 Uzuvlu, 2 Bağımsız Devreli Krank-Salınım Kolu-Piston Mekanizması ($F = 1$)
+        </p>
+      </div>
+      
+      <!-- Kontrol Butonları -->
+      <div class="flex items-center gap-2">
+        <button id="btnPlay" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1.5 shadow-sm">
+          <span id="playIcon">▶</span> <span id="playText">Oynat</span>
+        </button>
+        <button id="btnPreset120" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition shadow-sm">
+          Soru Durumu (θ₂ = 120°)
+        </button>
+        <button id="btnReset" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--border)] hover:bg-[var(--background)] transition">
+          Sıfırla (0°)
+        </button>
+      </div>
+    </div>
+
+    <!-- Açı Kaydırıcı (Slider) Çubuğu -->
+    <div class="bg-[var(--background)]/60 rounded-xl p-3 border border-[var(--border)] flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2 min-w-[200px]">
+        <span class="text-xs font-bold text-blue-600">Girdi Açısı (θ₂):</span>
+        <span id="txtTheta2Deg" class="text-sm font-extrabold px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20">120.0°</span>
+        <span id="txtTheta2Rad" class="text-xs text-[var(--muted-foreground)]">(2.09 rad)</span>
+      </div>
+      <input id="sliderTheta2" type="range" min="0" max="360" step="0.5" value="120" class="flex-1 h-2 bg-slate-300 dark:bg-slate-700 rounded-lg cursor-pointer accent-blue-600">
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-[var(--muted-foreground)]">Hız:</span>
+        <select id="selSpeed" class="text-xs bg-[var(--card)] border border-[var(--border)] rounded px-2 py-1">
+          <option value="0.5">0.5x</option>
+          <option value="1.0" selected>1.0x</option>
+          <option value="2.0">2.0x</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- İki Ana Panel: Sol Mekanizma İskeleti, Sağ Kinematik Zincir ve Değerler -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      
+      <!-- SOL PANEL: Canlı Ölçekli Mekanizma Kanvası (7 Kolon) -->
+      <div class="lg:col-span-7 bg-[var(--background)] rounded-xl border border-[var(--border)] p-3 flex flex-col items-center justify-between relative overflow-hidden">
+        <div class="w-full flex justify-between items-center px-2 py-1 text-xs text-[var(--muted-foreground)] font-semibold border-b border-[var(--border)]/50 mb-2">
+          <span>ÖLÇEKLİ MEKANİZMA İSKELETİ (CANLI GEOMETRİ)</span>
+          <span class="text-emerald-600 font-bold">1:1 Birebir Kinematik Çözüm</span>
+        </div>
+        
+        <svg id="mechSvg" viewBox="-40 -20 150 100" class="w-full h-[360px] select-none">
+          <!-- Izgara ve Referans Çizgileri -->
+          <defs>
+            <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="currentColor" stroke-opacity="0.06" stroke-width="0.5"/>
+            </pattern>
+            <!-- Ok ucu tanımları -->
+            <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.8"/>
+            </marker>
+          </defs>
+          <rect x="-40" y="-20" width="150" height="100" fill="url(#grid)" />
+
+          <!-- E Kılavuzu Yatay Doğrusu -->
+          <line x1="-30" y1="32" x2="105" y2="32" stroke="gray" stroke-width="0.8" stroke-dasharray="2 2" opacity="0.6"/>
+          
+          <!-- AC Mesnetleri Arası Düşey Doğru (32 mm) -->
+          <line x1="0" y1="0" x2="0" y2="32" stroke="#9333ea" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.8"/>
+          <text x="2" y="16" fill="#9333ea" font-size="3.5" font-weight="bold">|AC| = 32mm</text>
+
+          <!-- Mesnet A Taraması -->
+          <g id="groundA">
+            <polygon points="0,0 -3,-5 3,-5" fill="#cbd5e1" stroke="#334155" stroke-width="0.8"/>
+            <line x1="-6" y1="-5" x2="6" y2="-5" stroke="#1e293b" stroke-width="1.2"/>
+            <line x1="-5" y1="-5" x2="-7" y2="-8" stroke="#1e293b" stroke-width="0.8"/>
+            <line x1="-2" y1="-5" x2="-4" y2="-8" stroke="#1e293b" stroke-width="0.8"/>
+            <line x1="1" y1="-5" x2="-1" y2="-8" stroke="#1e293b" stroke-width="0.8"/>
+            <line x1="4" y1="-5" x2="2" y2="-8" stroke="#1e293b" stroke-width="0.8"/>
+            <circle cx="0" cy="0" r="1.5" fill="#0f172a"/>
+            <text x="-6" y="1" font-size="5" font-weight="extrabold" fill="currentColor">A</text>
+          </g>
+
+          <!-- Mesnet C Taraması -->
+          <g id="groundC">
+            <polygon points="0,32 -3,27 3,27" fill="#cbd5e1" stroke="#334155" stroke-width="0.8"/>
+            <line x1="-6" y1="27" x2="6" y2="27" stroke="#1e293b" stroke-width="1.2"/>
+            <line x1="-5" y1="27" x2="-7" y2="24" stroke="#1e293b" stroke-width="0.8"/>
+            <line x1="-2" y1="27" x2="-4" y2="24" stroke="#1e293b" stroke-width="0.8"/>
+            <line x1="1" y1="27" x2="-1" y2="24" stroke="#1e293b" stroke-width="0.8"/>
+            <line x1="4" y1="27" x2="2" y2="24" stroke="#1e293b" stroke-width="0.8"/>
+            <circle cx="0" cy="32" r="1.5" fill="#0f172a"/>
+            <text x="-6" y="33" font-size="5" font-weight="extrabold" fill="currentColor">C</text>
+          </g>
+
+          <!-- Uzuv 4: Salınım Kolu (C'den geçer, D'ye ve B yönüne uzanır) -->
+          <line id="link4" x1="0" y1="0" x2="0" y2="0" stroke="#f97316" stroke-width="3.5" stroke-linecap="round" opacity="0.85"/>
+          <line id="link4Slot" x1="0" y1="0" x2="0" y2="0" stroke="#9a3412" stroke-width="0.9" stroke-linecap="round"/>
+
+          <!-- Uzuv 2: Dönen Krank AB -->
+          <line id="link2" x1="0" y1="0" x2="0" y2="0" stroke="#2563eb" stroke-width="3.2" stroke-linecap="round"/>
+          <circle id="jointB" cx="0" cy="0" r="1.8" fill="#1e293b" stroke="white" stroke-width="0.6"/>
+          <text id="lblB" x="0" y="0" font-size="4.8" font-weight="extrabold" fill="#1e40af">B</text>
+
+          <!-- Uzuv 3: Kayıcı Taş (B noktasında Kol 4 boyunca dönük dikdörtgen) -->
+          <g id="slider3Group">
+            <rect id="slider3" x="-5" y="-3" width="10" height="6" rx="1" fill="#4ade80" stroke="#166534" stroke-width="1" opacity="0.9"/>
+            <circle cx="0" cy="0" r="1.2" fill="#166534"/>
+          </g>
+
+          <!-- Uzuv 5: Biyel Çubuğu DE -->
+          <line id="link5" x1="0" y1="0" x2="0" y2="0" stroke="#a855f7" stroke-width="3" stroke-linecap="round"/>
+          <circle id="jointD" cx="0" cy="0" r="1.8" fill="#1e293b" stroke="white" stroke-width="0.6"/>
+          <text id="lblD" x="0" y="0" font-size="4.8" font-weight="extrabold" fill="#6b21a8">D</text>
+
+          <!-- Uzuv 6: Piston E (Yatay Kılavuzda Kayan Blok) -->
+          <g id="pistonGroup">
+            <!-- Kılavuz cidar taramaları -->
+            <line id="pistonGuideTop" x1="0" y1="37" x2="30" y2="37" stroke="#475569" stroke-width="1.2"/>
+            <line id="pistonGuideBot" x1="0" y1="27" x2="30" y2="27" stroke="#475569" stroke-width="1.2"/>
+            <!-- Piston Dikdörtgeni -->
+            <rect id="pistonRect" x="0" y="27.5" width="14" height="9" rx="1.5" fill="#fef08a" stroke="#ca8a04" stroke-width="1.2"/>
+            <circle id="jointE" cx="0" cy="32" r="1.8" fill="#1e293b" stroke="white" stroke-width="0.6"/>
+            <text id="lblE" x="0" y="42" font-size="5" font-weight="extrabold" fill="#854d0e">E</text>
+          </g>
+
+          <!-- Konum Göstergeleri: s6 çizgisi -->
+          <line id="lineS6" x1="0" y1="20" x2="0" y2="20" stroke="#6366f1" stroke-width="1" stroke-dasharray="2 1"/>
+          <text id="lblS6" x="0" y="18" font-size="3.5" font-weight="bold" fill="#4338ca">s₆</text>
+        </svg>
+
+        <!-- Açıklama Lejantı -->
+        <div class="w-full grid grid-cols-3 gap-2 text-[11px] pt-2 border-t border-[var(--border)]/60 text-center">
+          <div class="flex items-center justify-center gap-1.5"><span class="w-3 h-1.5 rounded bg-blue-600 inline-block"></span> Uzuv 2: Krank (|AB|=28)</div>
+          <div class="flex items-center justify-center gap-1.5"><span class="w-3 h-1.5 rounded bg-green-500 inline-block"></span> Uzuv 3: Kayar Taş</div>
+          <div class="flex items-center justify-center gap-1.5"><span class="w-3 h-1.5 rounded bg-orange-500 inline-block"></span> Uzuv 4: Salınım Kolu (|CD|=38)</div>
+          <div class="flex items-center justify-center gap-1.5"><span class="w-3 h-1.5 rounded bg-purple-500 inline-block"></span> Uzuv 5: Biyel (|DE|=41)</div>
+          <div class="flex items-center justify-center gap-1.5"><span class="w-3 h-1.5 rounded bg-yellow-400 inline-block"></span> Uzuv 6: Piston (Yatay s₆)</div>
+          <div class="flex items-center justify-center gap-1.5"><span class="w-3 h-1.5 rounded bg-slate-400 inline-block"></span> Uzuv 1: Sabit Şasi</div>
+        </div>
+      </div>
+
+      <!-- SAĞ PANEL: Kinematik Zincir Şeması ve Anlık Değerler (5 Kolon) -->
+      <div class="lg:col-span-5 space-y-4 flex flex-col justify-between">
+        
+        <!-- KİNEMATİK ZİNCİR BLOK DİYAGRAMI -->
+        <div class="bg-[var(--background)] rounded-xl border border-[var(--border)] p-4">
+          <h3 class="text-xs font-bold text-[var(--foreground)] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            TOPOLOJİK KİNEMATİK ZİNCİR (GRAF)
+          </h3>
+          
+          <div class="space-y-2 text-xs">
+            <!-- Devre 1 Bloğu -->
+            <div class="p-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5">
+              <div class="font-bold text-blue-600 text-[11px] mb-1 flex justify-between">
+                <span>DEVRE 1 (Krank-Taş-Kol)</span>
+                <span class="text-[10px] bg-blue-500/20 px-1.5 py-0.2 rounded">4 Mafsal, F=1</span>
+              </div>
+              <div class="flex items-center justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800">1: Şasi (A)</span>
+                <span class="text-blue-500 font-bold">→ R₁₂ →</span>
+                <span class="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40">2: Krank</span>
+                <span class="text-blue-500 font-bold">→ R₂₃ →</span>
+                <span class="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40">3: Taş</span>
+                <span class="text-emerald-500 font-bold">→ P₃₄ →</span>
+                <span class="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40">4: Kol</span>
+              </div>
+            </div>
+
+            <!-- Devre 2 Bloğu -->
+            <div class="p-2.5 rounded-lg border border-purple-500/30 bg-purple-500/5">
+              <div class="font-bold text-purple-600 text-[11px] mb-1 flex justify-between">
+                <span>DEVRE 2 (Kol-Biyel-Piston)</span>
+                <span class="text-[10px] bg-purple-500/20 px-1.5 py-0.2 rounded">4 Mafsal, F=1</span>
+              </div>
+              <div class="flex items-center justify-between text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                <span class="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40">4: Kol (D)</span>
+                <span class="text-purple-500 font-bold">→ R₄₅ →</span>
+                <span class="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40">5: Biyel</span>
+                <span class="text-purple-500 font-bold">→ R₅₆ →</span>
+                <span class="px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40">6: Piston</span>
+                <span class="text-emerald-500 font-bold">→ P₁₆ →</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800">1: Şasi (E)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="mt-2 text-[10px] text-[var(--muted-foreground)] text-center italic">
+            * Toplam: 6 Uzuv, 7 Mafsal (5 Döner R + 2 Kayar P) ⟹ F = 3(6-1) - 2(7) = 1
+          </div>
+        </div>
+
+        <!-- ANLIK KİNEMATİK DEĞERLER TABLOSU -->
+        <div class="bg-[var(--background)] rounded-xl border border-[var(--border)] p-4">
+          <h3 class="text-xs font-bold text-[var(--foreground)] uppercase tracking-wider mb-2.5 flex items-center justify-between">
+            <span>ANLIK KONUM VE HIZ SONUÇLARI</span>
+            <span class="text-[10px] text-blue-500">ω₂ = 10 rad/s için</span>
+          </h3>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[10px] text-[var(--muted-foreground)]">Taş Kayma Mesafesi (s₃)</div>
+              <div id="valS3" class="text-sm font-extrabold text-emerald-600">16.00 mm</div>
+            </div>
+            <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[10px] text-[var(--muted-foreground)]">Salınım Kolu Açısı (θ₄)</div>
+              <div id="valTh4" class="text-sm font-extrabold text-orange-600">28.97°</div>
+            </div>
+            <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[10px] text-[var(--muted-foreground)]">Biyel Açısı (θ₅)</div>
+              <div id="valTh5" class="text-sm font-extrabold text-purple-600">-26.68°</div>
+            </div>
+            <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[10px] text-[var(--muted-foreground)]">Piston Yatay Konumu (s₆)</div>
+              <div id="valS6" class="text-sm font-extrabold text-indigo-600">69.88 mm</div>
+            </div>
+            <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[10px] text-[var(--muted-foreground)]">Kol Açısal Hızı (ω₄)</div>
+              <div id="valOmega4" class="text-sm font-extrabold text-orange-600">+0.31 rad/s</div>
+            </div>
+            <div class="p-2 rounded bg-[var(--card)] border border-[var(--border)]">
+              <div class="text-[10px] text-[var(--muted-foreground)]">Piston Hızı (V_E = ṡ₆)</div>
+              <div id="valV6" class="text-sm font-extrabold text-rose-600">-11.02 mm/s</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- KİNEMATİK HESAPLAMA VE ÇİZİM BETİĞİ -->
+  <script>
+    const slider = document.getElementById('sliderTheta2');
+    const txtDeg = document.getElementById('txtTheta2Deg');
+    const txtRad = document.getElementById('txtTheta2Rad');
+    const btnPlay = document.getElementById('btnPlay');
+    const playIcon = document.getElementById('playIcon');
+    const playText = document.getElementById('playText');
+    const btnPreset = document.getElementById('btnPreset120');
+    const btnReset = document.getElementById('btnReset');
+    const selSpeed = document.getElementById('selSpeed');
+
+    // Display fields
+    const valS3 = document.getElementById('valS3');
+    const valTh4 = document.getElementById('valTh4');
+    const valTh5 = document.getElementById('valTh5');
+    const valS6 = document.getElementById('valS6');
+    const valOmega4 = document.getElementById('valOmega4');
+    const valV6 = document.getElementById('valV6');
+
+    // SVG Elements
+    const link2 = document.getElementById('link2');
+    const jointB = document.getElementById('jointB');
+    const lblB = document.getElementById('lblB');
+    const link4 = document.getElementById('link4');
+    const link4Slot = document.getElementById('link4Slot');
+    const slider3Group = document.getElementById('slider3Group');
+    const link5 = document.getElementById('link5');
+    const jointD = document.getElementById('jointD');
+    const lblD = document.getElementById('lblD');
+    const pistonRect = document.getElementById('pistonRect');
+    const jointE = document.getElementById('jointE');
+    const lblE = document.getElementById('lblE');
+    const pistonGuideTop = document.getElementById('pistonGuideTop');
+    const pistonGuideBot = document.getElementById('pistonGuideBot');
+    const lineS6 = document.getElementById('lineS6');
+    const lblS6 = document.getElementById('lblS6');
+
+    // Geometrik Sabitler (mm)
+    const r2 = 28.0;   // |AB|
+    const h_AC = 32.0; // |AC|
+    const r4 = 38.0;   // |CD|
+    const r5 = 41.0;   // |DE|
+    const omega2_base = 10.0; // rad/s referans motor hızı
+
+    let isPlaying = false;
+    let animId = null;
+
+    function solveKinematics(th2_deg) {
+      const th2 = (th2_deg * Math.PI) / 180.0;
+      const xA = 0.0, yA = 0.0;
+      const xC = 0.0, yC = h_AC; // (0, 32)
+
+      // 1. Krank B noktası
+      const xB = r2 * Math.cos(th2);
+      const yB = r2 * Math.sin(th2);
+
+      // 2. Devre 1 Çözümü: Kol 4 ve Taş 3
+      // s3*cos(th4) = -xB
+      // s3*sin(th4) = yC - yB
+      const dx = -xB;
+      const dy = yC - yB;
+      const s3 = Math.sqrt(dx * dx + dy * dy);
+      const th4 = Math.atan2(dy, dx);
+      const th4_deg = (th4 * 180.0) / Math.PI;
+
+      // 3. Kol 4 ucu D noktası
+      const xD = xC + r4 * Math.cos(th4);
+      const yD = yC + r4 * Math.sin(th4);
+
+      // 4. Devre 2 Çözümü: Biyel 5 ve Piston E
+      // E noktası y = 32 ekseninde kayar. (yE = yC)
+      // (yE - yD) = 41 * sin(th5)  => sin(th5) = (yC - yD) / 41
+      const sin_th5 = (yC - yD) / r5;
+      const th5 = Math.asin(sin_th5); // 4. bölge (-pi/2 .. pi/2)
+      const th5_deg = (th5 * 180.0) / Math.PI;
+
+      // xE - xD = 41 * cos(th5)
+      const xE = xD + r5 * Math.cos(th5);
+      const yE = yC;
+      const s6 = xE;
+
+      // Hız Analizi (omega2 = 10 rad/s için)
+      const d_th = th2 - th4;
+      const s3_dot = r2 * omega2_base * Math.sin(d_th);
+      const omega4 = -(r2 * omega2_base * Math.cos(d_th)) / s3;
+      const omega5 = - (r4 * Math.cos(th4) / (r5 * Math.cos(th5))) * omega4;
+      const v6 = -r4 * omega4 * Math.sin(th4) - r5 * omega5 * Math.sin(th5);
+
+      return {
+        xA, yA, xB, yB, xC, yC, xD, yD, xE, yE,
+        th2_deg, th4_deg, th5_deg, s3, s6,
+        omega4, s3_dot, omega5, v6
+      };
+    }
+
+    function updateView(sol) {
+      // Metin güncellemeleri
+      txtDeg.textContent = sol.th2_deg.toFixed(1) + '°';
+      txtRad.textContent = '(' + ((sol.th2_deg * Math.PI)/180).toFixed(2) + ' rad)';
+      
+      valS3.textContent = sol.s3.toFixed(2) + ' mm';
+      valTh4.textContent = sol.th4_deg.toFixed(2) + '°';
+      valTh5.textContent = sol.th5_deg.toFixed(2) + '°';
+      valS6.textContent = sol.s6.toFixed(2) + ' mm';
+      valOmega4.textContent = (sol.omega4 >= 0 ? '+' : '') + sol.omega4.toFixed(2) + ' rad/s';
+      valV6.textContent = (sol.v6 >= 0 ? '+' : '') + sol.v6.toFixed(2) + ' mm/s';
+
+      // SVG Çizim Güncellemeleri
+      // Krank AB
+      link2.setAttribute('x1', sol.xA);
+      link2.setAttribute('y1', sol.yA);
+      link2.setAttribute('x2', sol.xB);
+      link2.setAttribute('y2', sol.yB);
+
+      jointB.setAttribute('cx', sol.xB);
+      jointB.setAttribute('cy', sol.yB);
+      lblB.setAttribute('x', sol.xB - 6);
+      lblB.setAttribute('y', sol.yB + 4);
+
+      // Salınım Kolu 4 (B'den C'ye ve D'ye uzanan rijit çizgi)
+      const vx = Math.cos((sol.th4_deg * Math.PI)/180);
+      const vy = Math.sin((sol.th4_deg * Math.PI)/180);
+      // Kolu B'nin biraz gerisinden D'nin biraz ötesine çiz
+      const p1x = sol.xB - 10 * vx;
+      const p1y = sol.yB - 10 * vy;
+      const p2x = sol.xD + 5 * vx;
+      const p2y = sol.yD + 5 * vy;
+
+      link4.setAttribute('x1', p1x);
+      link4.setAttribute('y1', p1y);
+      link4.setAttribute('x2', p2x);
+      link4.setAttribute('y2', p2y);
+
+      link4Slot.setAttribute('x1', p1x);
+      link4Slot.setAttribute('y1', p1y);
+      link4Slot.setAttribute('x2', p2x);
+      link4Slot.setAttribute('y2', p2y);
+
+      // Taş 3 (B merkezli, kolun açısıyla dönük)
+      slider3Group.setAttribute('transform', `translate(${sol.xB}, ${sol.yB}) rotate(${sol.th4_deg})`);
+
+      // Biyel 5 (DE)
+      link5.setAttribute('x1', sol.xD);
+      link5.setAttribute('y1', sol.yD);
+      link5.setAttribute('x2', sol.xE);
+      link5.setAttribute('y2', sol.yE);
+
+      jointD.setAttribute('cx', sol.xD);
+      jointD.setAttribute('cy', sol.yD);
+      lblD.setAttribute('x', sol.xD + 2);
+      lblD.setAttribute('y', sol.yD + 5);
+
+      // Piston E
+      pistonRect.setAttribute('x', sol.xE - 7);
+      jointE.setAttribute('cx', sol.xE);
+      lblE.setAttribute('x', sol.xE - 2);
+
+      pistonGuideTop.setAttribute('x1', sol.xE - 15);
+      pistonGuideTop.setAttribute('x2', sol.xE + 15);
+      pistonGuideBot.setAttribute('x1', sol.xE - 15);
+      pistonGuideBot.setAttribute('x2', sol.xE + 15);
+
+      // s6 referans çizgisi
+      lineS6.setAttribute('x1', sol.xC);
+      lineS6.setAttribute('y1', 22);
+      lineS6.setAttribute('x2', sol.xE);
+      lineS6.setAttribute('y2', 22);
+      lblS6.setAttribute('x', (sol.xC + sol.xE)/2 - 8);
+      lblS6.textContent = `s₆ = ${sol.s6.toFixed(1)} mm`;
+    }
+
+    function render() {
+      const th2 = parseFloat(slider.value);
+      const sol = solveKinematics(th2);
+      updateView(sol);
+    }
+
+    slider.addEventListener('input', render);
+
+    btnPreset.addEventListener('click', () => {
+      slider.value = 120;
+      if (isPlaying) togglePlay();
+      render();
+    });
+
+    btnReset.addEventListener('click', () => {
+      slider.value = 0;
+      if (isPlaying) togglePlay();
+      render();
+    });
+
+    function togglePlay() {
+      isPlaying = !isPlaying;
+      if (isPlaying) {
+        playIcon.textContent = '❚❚';
+        playText.textContent = 'Durdur';
+        let lastTime = performance.now();
+        function loop(time) {
+          const dt = (time - lastTime) / 1000;
+          lastTime = time;
+          const speedMult = parseFloat(selSpeed.value);
+          let val = parseFloat(slider.value) + 45.0 * dt * speedMult;
+          if (val >= 360) val -= 360;
+          slider.value = val;
+          render();
+          animId = requestAnimationFrame(loop);
+        }
+        animId = requestAnimationFrame(loop);
+      } else {
+        playIcon.textContent = '▶';
+        playText.textContent = 'Oynat';
+        cancelAnimationFrame(animId);
+      }
+    }
+
+    btnPlay.addEventListener('click', togglePlay);
+
+    // İlk çizim
+    render();
+  </script>
+</body>
+</html>
